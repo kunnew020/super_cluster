@@ -2,6 +2,7 @@ import 'package:rbush/rbush.dart';
 import 'package:supercluster/src/mutable/boundary_extensions.dart';
 
 import '../cluster_data_base.dart';
+import '../map_reduce_cluster_data.dart';
 import '../util.dart' as util;
 import 'mutable_layer.dart';
 import 'mutable_layer_element.dart';
@@ -11,6 +12,8 @@ class LayerClusterer<T> {
   final int radius;
   final int extent;
   final ClusterDataBase Function(T point)? extractClusterData;
+  final Map<String, dynamic> Function(T point)? mapPointToProperties;
+  final void Function(Map<String, dynamic> accumulated, Map<String, dynamic> pointProperties)? reduceProperties;
   final String Function() generateUuid;
 
   LayerClusterer({
@@ -19,6 +22,8 @@ class LayerClusterer<T> {
     required this.extent,
     required this.generateUuid,
     this.extractClusterData,
+    this.mapPointToProperties,
+    this.reduceProperties,
   });
 
   List<RBushElement<MutableLayerElement<T>>> newClusterElements(
@@ -81,6 +86,13 @@ class LayerClusterer<T> {
       } else {
         final clusterId = generateUuid();
         ClusterDataBase? clusterData;
+
+        // Handle map-reduce functionality
+        Map<String, dynamic>? aggregatedProperties;
+        if (mapPointToProperties != null && reduceProperties != null) {
+          aggregatedProperties = _getElementProperties(data);
+        }
+
         for (final clusterableNeighbor in clusterableNeighbors) {
           clusterableNeighbor.parentUuid = clusterId;
           clusterableNeighbor.visitedAtZoom =
@@ -88,11 +100,24 @@ class LayerClusterer<T> {
           wx += clusterableNeighbor.x * clusterableNeighbor.numPoints;
           wy += clusterableNeighbor.y * clusterableNeighbor.numPoints;
 
+          // Handle legacy cluster data extraction
           if (extractClusterData != null) {
             clusterData ??= _extractClusterData(data);
             clusterData =
                 clusterData.combine(_extractClusterData(clusterableNeighbor));
           }
+
+          // Handle map-reduce aggregation
+          if (aggregatedProperties != null && reduceProperties != null) {
+            final neighborProperties = _getElementProperties(clusterableNeighbor);
+            reduceProperties!(aggregatedProperties, neighborProperties);
+          }
+        }
+
+        // Combine map-reduce data with legacy cluster data if needed
+        if (aggregatedProperties != null) {
+          final mapReduceData = MapReduceClusterData(aggregatedProperties);
+          clusterData = clusterData?.combine(mapReduceData) ?? mapReduceData;
         }
 
         // form a cluster with neighbors
@@ -122,6 +147,25 @@ class LayerClusterer<T> {
           extractClusterData!(mapPoint.originalPoint),
         MutableLayerElement<T>() => throw UnimplementedError(),
       };
+
+  /// Helper method to get properties from a point or cluster element for map-reduce functionality
+  Map<String, dynamic> _getElementProperties(MutableLayerElement<T> element) {
+    if (mapPointToProperties == null) return <String, dynamic>{};
+    
+    switch (element) {
+      case MutableLayerPoint<T> point:
+        return mapPointToProperties!(point.originalPoint);
+      case MutableLayerCluster<T> cluster:
+        // For clusters, try to get properties from existing MapReduceClusterData
+        if (cluster.clusterData is MapReduceClusterData) {
+          return (cluster.clusterData as MapReduceClusterData).properties;
+        }
+        // Fallback to empty properties if no map-reduce data exists
+        return <String, dynamic>{};
+      default:
+        return <String, dynamic>{};
+    }
+  }
 
   bool _closeEnoughToCluster(
     MutableLayerElement<T> a,

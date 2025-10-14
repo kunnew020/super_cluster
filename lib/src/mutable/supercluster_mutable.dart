@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:rbush/rbush.dart';
+import 'package:supercluster/src/map_reduce_cluster_data.dart';
 import 'package:supercluster/src/mutable/layer_clusterer.dart';
 import 'package:supercluster/src/mutable/mutable_layer.dart';
 import 'package:supercluster/src/mutable/rbush_element_set.dart';
@@ -30,6 +31,8 @@ class SuperclusterMutable<T> extends Supercluster<T> {
     super.extent,
     super.nodeSize = 16,
     super.extractClusterData,
+    super.mapPointToProperties,
+    super.reduceProperties,
   }) {
     if (generateUuid == null) {
       _uuidInstance = Uuid();
@@ -43,6 +46,8 @@ class SuperclusterMutable<T> extends Supercluster<T> {
       radius: radius,
       extent: extent,
       extractClusterData: extractClusterData,
+      mapPointToProperties: mapPointToProperties,
+      reduceProperties: reduceProperties,
       generateUuid: generateUuid ?? () => Uuid().v4(),
     );
 
@@ -413,7 +418,7 @@ class SuperclusterMutable<T> extends Supercluster<T> {
         index: -1,
         lon: getX(originalPoint),
         lat: getY(originalPoint),
-        clusterData: extractClusterData?.call(originalPoint),
+        clusterData: _combineClusterData(originalPoint),
         zoom: maxZoom + 1,
       );
 
@@ -424,9 +429,23 @@ class SuperclusterMutable<T> extends Supercluster<T> {
         index: _cursor++,
         lon: getX(originalPoint),
         lat: getY(originalPoint),
-        clusterData: extractClusterData?.call(originalPoint),
+        clusterData: _combineClusterData(originalPoint),
         zoom: maxZoom + 1,
       );
+
+  /// Helper method to combine legacy cluster data with map-reduce data
+  ClusterDataBase? _combineClusterData(T point) {
+    ClusterDataBase? clusterData = extractClusterData?.call(point);
+    
+    // Add map-reduce data if map function is provided
+    if (mapPointToProperties != null) {
+      final mappedProperties = mapPointToProperties!(point);
+      final mapReduceData = MapReduceClusterData(mappedProperties);
+      clusterData = clusterData?.combine(mapReduceData) ?? mapReduceData;
+    }
+    
+    return clusterData;
+  }
 
   @visibleForTesting
   MutableLayer<T> treeAt(int zoom) => _trees[zoom];

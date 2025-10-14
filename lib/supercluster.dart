@@ -1,11 +1,13 @@
 library supercluster;
 
-import 'supercluster.dart';
+import 'src/cluster_data_base.dart';
+import 'src/map_reduce_cluster_data.dart';
 
 export 'src/cluster_data_base.dart';
 export 'src/immutable/immutable_layer_element.dart';
 export 'src/immutable/supercluster_immutable.dart';
 export 'src/layer_element.dart';
+export 'src/map_reduce_cluster_data.dart';
 export 'src/mutable/layer_modification.dart';
 export 'src/mutable/mutable_layer_element.dart';
 export 'src/mutable/supercluster_mutable.dart';
@@ -23,6 +25,17 @@ abstract class Supercluster<T> {
 
   final ClusterDataBase Function(T point)? extractClusterData;
 
+  /// A function to map individual point properties to properties used for clustering.
+  /// Similar to the 'map' option in JavaScript supercluster.
+  /// If null, the original point properties are used directly.
+  final Map<String, dynamic> Function(T point)? mapPointToProperties;
+
+  /// A function to reduce/aggregate properties when points are clustered together.
+  /// Similar to the 'reduce' option in JavaScript supercluster.
+  /// The first parameter is the accumulated properties, the second is the properties to merge.
+  /// If null, no custom aggregation is performed.
+  final void Function(Map<String, dynamic> accumulated, Map<String, dynamic> pointProperties)? reduceProperties;
+
   Supercluster({
     required this.getX,
     required this.getY,
@@ -33,6 +46,8 @@ abstract class Supercluster<T> {
     int? radius,
     int? extent,
     this.extractClusterData,
+    this.mapPointToProperties,
+    this.reduceProperties,
   }) : assert(minPoints == null || minPoints > 1),
        minZoom = minZoom ?? 0,
        maxZoom = maxZoom ?? 16,

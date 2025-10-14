@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:supercluster/src/immutable/immutable_layer.dart';
+import 'package:supercluster/src/map_reduce_cluster_data.dart';
 import 'package:supercluster/src/util.dart' as util;
 
 import '../../supercluster.dart';
@@ -19,6 +20,8 @@ class SuperclusterImmutable<T> extends Supercluster<T> {
     super.extent,
     super.nodeSize = 64,
     super.extractClusterData,
+    super.mapPointToProperties,
+    super.reduceProperties,
   }) {
     _trees = List.filled(maxZoom + 2, null);
   }
@@ -217,6 +220,13 @@ class SuperclusterImmutable<T> extends Supercluster<T> {
         var clusterData = p.clusterData ??
             (extractClusterData != null ? _extractClusterData(p) : null);
 
+        // Handle map-reduce functionality
+        Map<String, dynamic>? aggregatedProperties;
+        if (mapPointToProperties != null && reduceProperties != null) {
+          // Initialize aggregated properties with the main point's properties
+          aggregatedProperties = _getPointProperties(p);
+        }
+
         // encode both zoom and point index on which the cluster originated -- offset by total length of features
         final id = (i << 5) + (zoom + 1) + _length;
 
@@ -230,10 +240,23 @@ class SuperclusterImmutable<T> extends Supercluster<T> {
 
           neighbor.parentId = id;
 
+          // Handle legacy cluster data extraction
           if (extractClusterData != null) {
             clusterData ??= _extractClusterData(p);
             clusterData = clusterData.combine(_extractClusterData(neighbor));
           }
+
+          // Handle map-reduce aggregation
+          if (aggregatedProperties != null && reduceProperties != null) {
+            final neighborProperties = _getPointProperties(neighbor);
+            reduceProperties!(aggregatedProperties, neighborProperties);
+          }
+        }
+
+        // Combine map-reduce data with legacy cluster data if needed
+        if (aggregatedProperties != null) {
+          final mapReduceData = MapReduceClusterData(aggregatedProperties);
+          clusterData = clusterData?.combine(mapReduceData) ?? mapReduceData;
         }
 
         p.parentId = id;
@@ -284,14 +307,43 @@ class SuperclusterImmutable<T> extends Supercluster<T> {
     final x = getX(point);
     final y = getY(point);
 
+    // Combine legacy cluster data with map-reduce data
+    ClusterDataBase? clusterData = extractClusterData?.call(point);
+    
+    // Add map-reduce data if map function is provided
+    if (mapPointToProperties != null) {
+      final mappedProperties = mapPointToProperties!(point);
+      final mapReduceData = MapReduceClusterData(mappedProperties);
+      clusterData = clusterData?.combine(mapReduceData) ?? mapReduceData;
+    }
+
     return ImmutableLayerElement.initializePoint<T>(
       originalPoint: point,
       x: util.lngX(x),
       y: util.latY(y),
       index: index,
-      clusterData: extractClusterData?.call(point),
+      clusterData: clusterData,
       zoom: maxZoom + 1,
     );
+  }
+
+  /// Helper method to get properties from a point or cluster element for map-reduce functionality
+  Map<String, dynamic> _getPointProperties(ImmutableLayerElement<T> element) {
+    if (mapPointToProperties == null) return <String, dynamic>{};
+    
+    switch (element) {
+      case ImmutableLayerPoint<T> point:
+        return mapPointToProperties!(point.originalPoint);
+      case ImmutableLayerCluster<T> cluster:
+        // For clusters, try to get properties from existing MapReduceClusterData
+        if (cluster.clusterData is MapReduceClusterData) {
+          return (cluster.clusterData as MapReduceClusterData).properties;
+        }
+        // Fallback to empty properties if no map-reduce data exists
+        return <String, dynamic>{};
+      default:
+        return <String, dynamic>{};
+    }
   }
 
   @override
