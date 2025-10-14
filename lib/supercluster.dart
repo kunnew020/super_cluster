@@ -1,6 +1,7 @@
 library supercluster;
 
 import 'src/cluster_data_base.dart';
+import 'src/layer_element.dart';
 import 'src/map_reduce_cluster_data.dart';
 
 export 'src/cluster_data_base.dart';
