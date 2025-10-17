@@ -223,8 +223,8 @@ class SuperclusterImmutable<T> extends Supercluster<T> {
         // Handle map-reduce functionality
         Map<String, dynamic>? aggregatedProperties;
         if (mapPointToProperties != null && reduceProperties != null) {
-          // Initialize aggregated properties with the main point's properties
-          aggregatedProperties = _getPointProperties(p);
+          // Initialize aggregated properties with a fresh copy (matching JS clone=true)
+          aggregatedProperties = Map<String, dynamic>.from(_getPointProperties(p));
         }
 
         // encode both zoom and point index on which the cluster originated -- offset by total length of features
@@ -249,7 +249,8 @@ class SuperclusterImmutable<T> extends Supercluster<T> {
           // Handle map-reduce aggregation
           if (aggregatedProperties != null && reduceProperties != null) {
             final neighborProperties = _getPointProperties(neighbor);
-            reduceProperties!(aggregatedProperties, neighborProperties);
+            // Always pass a copy to reduce to prevent mutation of source data
+            reduceProperties!(aggregatedProperties, Map<String, dynamic>.from(neighborProperties));
           }
         }
 

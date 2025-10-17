@@ -90,7 +90,8 @@ class LayerClusterer<T> {
         // Handle map-reduce functionality
         Map<String, dynamic>? aggregatedProperties;
         if (mapPointToProperties != null && reduceProperties != null) {
-          aggregatedProperties = _getElementProperties(data);
+          // Create a fresh copy for accumulated properties (matching JS clone=true)
+          aggregatedProperties = Map<String, dynamic>.from(_getElementProperties(data));
         }
 
         for (final clusterableNeighbor in clusterableNeighbors) {
@@ -110,7 +111,8 @@ class LayerClusterer<T> {
           // Handle map-reduce aggregation
           if (aggregatedProperties != null && reduceProperties != null) {
             final neighborProperties = _getElementProperties(clusterableNeighbor);
-            reduceProperties!(aggregatedProperties, neighborProperties);
+            // Always pass a copy to reduce to prevent mutation of source data
+            reduceProperties!(aggregatedProperties, Map<String, dynamic>.from(neighborProperties));
           }
         }
 
