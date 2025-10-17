@@ -158,7 +158,8 @@ class LayerClusterer<T> {
       case MutableLayerCluster<T> cluster:
         // For clusters, try to get properties from existing MapReduceClusterData
         if (cluster.clusterData is MapReduceClusterData) {
-          return (cluster.clusterData as MapReduceClusterData).properties;
+          // Return a COPY of the properties to avoid mutation of the original cluster data
+          return Map<String, dynamic>.from((cluster.clusterData as MapReduceClusterData).properties);
         }
         // Fallback to empty properties if no map-reduce data exists
         return <String, dynamic>{};
