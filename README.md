@@ -111,7 +111,34 @@ void main() {
 
 ### Map-Reduce Aggregation
 
-Both `SuperclusterImmutable` and `SuperclusterMutable` support map-reduce functionality for aggregating custom properties during clustering, similar to the JavaScript version:
+Both `SuperclusterImmutable` and `SuperclusterMutable` support map-reduce functionality for aggregating custom properties during clustering, matching the JavaScript supercluster API.
+
+#### JavaScript vs Dart Comparison
+
+**JavaScript (original supercluster):**
+```javascript
+const index = new Supercluster({
+    map: (props) => ({sum: props.myValue}),
+    reduce: (accumulated, props) => { accumulated.sum += props.sum; }
+});
+```
+
+**Dart (this library):**
+```dart
+final supercluster = SuperclusterImmutable(
+  mapPointToProperties: (point) => {'sum': point.myValue},
+  reduceProperties: (accumulated, props) {
+    accumulated['sum'] = (accumulated['sum'] ?? 0) + (props['sum'] ?? 0);
+  },
+);
+```
+
+The behavior is identical:
+- **`map` / `mapPointToProperties`**: Extracts properties from individual points
+- **`reduce` / `reduceProperties`**: Aggregates properties when points cluster together
+- The reduce function mutates the `accumulated` map directly, just like JavaScript
+
+#### Complete Example
 
 ```dart
 class BusinessPoint {
@@ -182,6 +209,57 @@ void main() {
       },
       point: (p) => print('Individual point: ${p.originalPoint.name}'),
     );
+  }
+}
+```
+
+#### Important Map-Reduce Notes
+
+To ensure correct behavior (matching the JavaScript implementation):
+
+1. **`mapPointToProperties` must return a new object**, not existing properties of a point, otherwise it will get overwritten:
+   ```dart
+   // ✓ CORRECT: Returns a new map
+   mapPointToProperties: (point) => {'sum': point.value}
+   
+   // ✗ WRONG: Returns reference to existing properties (will be mutated)
+   mapPointToProperties: (point) => point.properties
+   ```
+
+2. **`reduceProperties` must not mutate the second argument** (`props`), only the first (`accumulated`):
+   ```dart
+   // ✓ CORRECT: Only modifies accumulated
+   reduceProperties: (accumulated, props) {
+     accumulated['sum'] = (accumulated['sum'] ?? 0) + (props['sum'] ?? 0);
+   }
+   
+   // ✗ WRONG: Modifies props (second argument)
+   reduceProperties: (accumulated, props) {
+     props['sum'] = props['sum'] + accumulated['sum']; // Don't do this!
+   }
+   ```
+
+3. **Both functions must be provided together** or neither:
+   - If you provide `mapPointToProperties`, you should also provide `reduceProperties`
+   - The `reduce` function is called automatically when clustering points together
+   - Without `reduce`, map-reduce aggregation won't work correctly
+
+#### Accessing Aggregated Properties
+
+After clustering, access the aggregated properties from cluster data:
+
+```dart
+final clusters = supercluster.search(westLng, southLat, eastLng, northLat, zoom);
+
+for (final element in clusters) {
+  if (element is ImmutableLayerCluster) {
+    // Access aggregated properties
+    if (element.clusterData is MapReduceClusterData) {
+      final data = element.clusterData as MapReduceClusterData;
+      final sum = data.properties['sum'];
+      final average = data.properties['average'];
+      // ... use aggregated data
+    }
   }
 }
 ```

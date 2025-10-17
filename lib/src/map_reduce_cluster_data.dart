@@ -5,47 +5,80 @@ import 'cluster_data_base.dart';
 /// 
 /// This class stores aggregated properties that result from applying
 /// a reduce function to mapped point properties during clustering.
+/// 
+/// In the JavaScript supercluster:
+/// - `map` extracts properties from individual points
+/// - `reduce` merges properties when clustering points together
+/// 
+/// Example from JavaScript:
+/// ```javascript
+/// const index = new Supercluster({
+///     map: (props) => ({sum: props.myValue}),
+///     reduce: (accumulated, props) => { accumulated.sum += props.sum; }
+/// });
+/// ```
+/// 
+/// Dart equivalent:
+/// ```dart
+/// final supercluster = SuperclusterImmutable(
+///   mapPointToProperties: (point) => {'sum': point.myValue},
+///   reduceProperties: (accumulated, props) {
+///     accumulated['sum'] = (accumulated['sum'] ?? 0) + (props['sum'] ?? 0);
+///   },
+/// );
+/// ```
 class MapReduceClusterData extends ClusterDataBase {
-  /// The aggregated properties data as a dynamic map
+  /// The aggregated properties data as a dynamic map.
+  /// This is mutable to allow the reduce function to modify it directly,
+  /// matching the JavaScript implementation behavior.
   final Map<String, dynamic> properties;
 
-  MapReduceClusterData(this.properties);
+  /// Optional reduce function to use when combining cluster data.
+  /// This should be the same function passed to the Supercluster constructor.
+  final void Function(Map<String, dynamic> accumulated, Map<String, dynamic> props)? _reduceFunction;
+
+  MapReduceClusterData(this.properties, [this._reduceFunction]);
 
   /// Creates an empty MapReduceClusterData
-  MapReduceClusterData.empty() : properties = <String, dynamic>{};
+  MapReduceClusterData.empty([void Function(Map<String, dynamic>, Map<String, dynamic>)? reduceFunction]) 
+    : properties = <String, dynamic>{},
+      _reduceFunction = reduceFunction;
 
-  /// Creates a MapReduceClusterData from initial point properties
-  factory MapReduceClusterData.fromPointProperties(Map<String, dynamic> pointProperties) {
-    return MapReduceClusterData(Map<String, dynamic>.from(pointProperties));
+  /// Creates a MapReduceClusterData from initial point properties.
+  /// The properties are cloned to avoid mutation of the original.
+  factory MapReduceClusterData.fromPointProperties(
+    Map<String, dynamic> pointProperties,
+    [void Function(Map<String, dynamic>, Map<String, dynamic>)? reduceFunction]
+  ) {
+    return MapReduceClusterData(Map<String, dynamic>.from(pointProperties), reduceFunction);
   }
 
   @override
   MapReduceClusterData combine(covariant MapReduceClusterData other) {
-    // Create a new combined properties map
-    final combinedProperties = Map<String, dynamic>.from(properties);
+    // Create a new accumulated properties map (clone to avoid mutation)
+    final accumulated = Map<String, dynamic>.from(properties);
     
-    // Merge with other properties - this is a simple merge
-    // The actual aggregation should be done by the reduce function
-    other.properties.forEach((key, value) {
-      if (combinedProperties.containsKey(key)) {
-        // If both have the same key, we need to combine them
-        // For now, we'll use simple addition for numbers, otherwise take the other value
-        if (combinedProperties[key] is num && value is num) {
-          combinedProperties[key] = (combinedProperties[key] as num) + (value as num);
-        } else {
-          combinedProperties[key] = value;
-        }
-      } else {
-        combinedProperties[key] = value;
-      }
-    });
+    // If a reduce function is provided, use it to merge properties
+    // This matches the JavaScript behavior where reduce mutates the accumulated object
+    if (_reduceFunction != null) {
+      _reduceFunction!(accumulated, other.properties);
+    } else {
+      // Fallback: simple merge if no reduce function is provided
+      // This is for backward compatibility, but ideally reduce should always be provided
+      other.properties.forEach((key, value) {
+        accumulated[key] = value;
+      });
+    }
     
-    return MapReduceClusterData(combinedProperties);
+    return MapReduceClusterData(accumulated, _reduceFunction);
   }
 
   /// Creates a copy of this cluster data with updated properties
   MapReduceClusterData copyWith(Map<String, dynamic> newProperties) {
-    return MapReduceClusterData(Map<String, dynamic>.from(properties)..addAll(newProperties));
+    return MapReduceClusterData(
+      Map<String, dynamic>.from(properties)..addAll(newProperties),
+      _reduceFunction,
+    );
   }
 
   /// Gets a property value by key
@@ -69,10 +102,11 @@ class MapReduceClusterData extends ClusterDataBase {
       identical(this, other) ||
       other is MapReduceClusterData &&
           runtimeType == other.runtimeType &&
-          _mapEquals(properties, other.properties);
+          _mapEquals(properties, other.properties) &&
+          _reduceFunction == other._reduceFunction;
 
   @override
-  int get hashCode => properties.hashCode;
+  int get hashCode => Object.hash(properties.hashCode, _reduceFunction.hashCode);
 
   /// Helper method to compare two maps for equality
   bool _mapEquals(Map<String, dynamic> a, Map<String, dynamic> b) {

@@ -116,7 +116,7 @@ class LayerClusterer<T> {
 
         // Combine map-reduce data with legacy cluster data if needed
         if (aggregatedProperties != null) {
-          final mapReduceData = MapReduceClusterData(aggregatedProperties);
+          final mapReduceData = MapReduceClusterData(aggregatedProperties, reduceProperties);
           clusterData = clusterData?.combine(mapReduceData) ?? mapReduceData;
         }
 

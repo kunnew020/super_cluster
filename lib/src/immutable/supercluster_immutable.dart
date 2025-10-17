@@ -313,7 +313,7 @@ class SuperclusterImmutable<T> extends Supercluster<T> {
     // Add map-reduce data if map function is provided
     if (mapPointToProperties != null) {
       final mappedProperties = mapPointToProperties!(point);
-      final mapReduceData = MapReduceClusterData(mappedProperties);
+      final mapReduceData = MapReduceClusterData(mappedProperties, reduceProperties);
       clusterData = clusterData?.combine(mapReduceData) ?? mapReduceData;
     }
 
