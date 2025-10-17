@@ -244,6 +244,11 @@ To ensure correct behavior (matching the JavaScript implementation):
    - The `reduce` function is called automatically when clustering points together
    - Without `reduce`, map-reduce aggregation won't work correctly
 
+4. **Property mutation protection** (v3.2.1+):
+   - The library automatically creates copies of cluster properties during aggregation to prevent mutation
+   - This ensures accurate count aggregation and prevents double-counting issues
+   - You don't need to manually copy properties - the library handles this internally
+
 #### Accessing Aggregated Properties
 
 After clustering, access the aggregated properties from cluster data:

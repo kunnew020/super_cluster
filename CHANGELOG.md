@@ -1,3 +1,9 @@
+## 3.2.1
+
+- FIX: Map-reduce aggregation now returns copies of cluster properties to prevent mutation
+- FIX: Resolves double-counting issue where cluster counts could be inflated during multi-level clustering
+- IMPROVED: More accurate property aggregation matching JavaScript supercluster behavior
+
 ## 3.2.0
 
  - CHORE: Bump dependencies (thanks @l1qu1d)
